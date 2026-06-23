@@ -1,0 +1,29 @@
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ .Values.app_name }}-{{ .Values.env }}
+  annotations:
+    haproxy.router.openshift.io/timeout: 5m
+    {{- if .Values.ingress.certManager.enabled }}
+    cert-manager.io/certificate-name: {{ .Values.ingress.hostname }}
+    cert-manager.io/common-name: {{ .Values.ingress.hostname }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.certManager.clusterissuer }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.certManager.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.hostname }}
+      secretName: {{ .Values.ingress.hostname }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.hostname }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.app_name }}-{{ .Values.env }}
+                port:
+                  number: {{ .Values.ingress.targetPort }}

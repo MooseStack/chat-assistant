@@ -1,0 +1,26 @@
+# Stage 1: Build
+# FROM registry.access.redhat.com/ubi10/nodejs-24:latest
+FROM registry.access.redhat.com/hi/nodejs:26 AS build
+WORKDIR /opt/app-root/src
+
+COPY app .
+RUN npm ci
+RUN npm run build
+
+# Stage 2: Serve
+FROM registry.access.redhat.com/hi/nodejs:26
+WORKDIR /opt/app-root/src
+
+USER 0
+
+COPY --from=build /opt/app-root/src/dist ./dist
+COPY --from=build /opt/app-root/src/prestart.cjs ./prestart.cjs
+COPY --from=build /opt/app-root/src/package.json ./package.json
+
+RUN npm install --omit=dev --ignore-scripts && \
+    chmod -R g+w dist
+
+USER 1001
+EXPOSE 5173
+
+CMD ["npm", "run", "start"]

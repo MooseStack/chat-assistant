@@ -1,0 +1,68 @@
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+env: "dev"
+app_name: "sample-ai-app-react-frontend"
+
+image:
+  repository: "your-registry.example.com/your-team/sample-ai-app/react-frontend"
+  tag: "latest"
+  pullSecretName: "quay-image-registry-secret"
+
+replicaCount: 1
+
+appEnv:
+  BACKEND_URL: "https://sample-ai-app-backend.apps.your-cluster.example.com"
+  APP_TITLE: "Chat Assistant"
+  SSL_VERIFY: false
+
+
+autoscaling:
+  enabled: true
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
+  minReplicas: 1
+  maxReplicas: 2
+
+resources:
+  limits:
+    cpu: ".5"
+    memory: "500Mi"
+  requests:
+    cpu: ".5"
+    memory: "500Mi"    
+
+service:
+  type: ClusterIP
+  ports:
+    - name: 5173-tcp
+      protocol: TCP
+      port: 5173
+      targetPort: 5173
+      
+ingress:
+  hostname: sample-ai-app-react-frontend.apps.your-cluster.example.com
+  path: /
+  targetPort: 5173
+  certManager:
+    enabled: true
+    clusterissuer: venafi
+
+livenessProbe:
+  enabled: true
+  path: /  # Changed from / to dedicated health endpoint
+  frequency:
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    periodSeconds: 300
+    successThreshold: 1
+    failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  path: /
+  frequency:
+    initialDelaySeconds: 10
+    timeoutSeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+    failureThreshold: 3

@@ -1,0 +1,42 @@
+# Stage 1: Build the wheel
+FROM registry.access.redhat.com/hi/python:3.14-builder AS builder
+
+ENV PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org"
+
+WORKDIR /opt/app-root/src
+
+COPY pyproject.toml .
+COPY app/ app/
+
+RUN pip install --no-cache-dir build && \
+    python -m build --wheel --outdir /opt/app-root/dist
+
+# Stage 2: Install the wheel (using builder image which has bash)
+FROM registry.access.redhat.com/hi/python:3.14-builder AS installer
+
+ENV PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org"
+
+WORKDIR /opt/app-root/src
+
+COPY --from=builder /opt/app-root/dist/*.whl /tmp/
+
+RUN pip install --no-cache-dir --target=/opt/app-root/src/site-packages /tmp/*.whl
+
+# Stage 3: Final image (using builder base for native lib support, e.g. pyarrow)
+FROM registry.access.redhat.com/hi/python:3.14-builder
+
+WORKDIR /opt/app-root/src
+
+# Copy installed packages from installer
+COPY --from=installer /opt/app-root/src/site-packages /opt/app-root/src/site-packages
+
+ENV PYTHONPATH=/opt/app-root/src/site-packages
+
+EXPOSE 8501
+
+ENV BACKEND_URL="http://localhost:8000"
+ENV APP_TITLE="Chat Assistant"
+ENV SSL_VERIFY=false
+ENV LOG_LEVEL=ERROR
+
+CMD ["python", "-m", "streamlit", "run", "site-packages/app/main.py", "--server.port=8501", "--server.address=0.0.0.0"]

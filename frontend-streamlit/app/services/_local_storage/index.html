@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html><body><script>
+(function() {
+    var DB_NAME = "streamlit_persistent";
+    var STORE_NAME = "kv";
+    var DB_VERSION = 1;
+
+    function sendToStreamlit(type, data) {
+        window.parent.postMessage(
+            Object.assign({isStreamlitMessage: true, type: type}, data || {}), "*"
+        );
+    }
+
+    function openDB() {
+        return new Promise(function(resolve, reject) {
+            var request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onupgradeneeded = function() {
+                request.result.createObjectStore(STORE_NAME);
+            };
+            request.onsuccess = function() { resolve(request.result); };
+            request.onerror = function() { reject(request.error); };
+        });
+    }
+
+    function dbGet(key) {
+        return openDB().then(function(db) {
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction(STORE_NAME, "readonly");
+                var req = tx.objectStore(STORE_NAME).get(key);
+                req.onsuccess = function() { resolve(req.result !== undefined ? req.result : null); };
+                req.onerror = function() { reject(req.error); };
+            });
+        });
+    }
+
+    function dbSet(key, value) {
+        return openDB().then(function(db) {
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction(STORE_NAME, "readwrite");
+                tx.objectStore(STORE_NAME).put(value, key);
+                tx.oncomplete = function() { resolve(); };
+                tx.onerror = function() { reject(tx.error); };
+            });
+        });
+    }
+
+    if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persist();
+    }
+
+    window.addEventListener("message", function(event) {
+        if (!event.data || event.data.type !== "streamlit:render") return;
+
+        var args = event.data.args;
+        var key = args.storage_key;
+
+        if (args.save_data != null) {
+            dbSet(key, args.save_data).catch(function() {});
+            sendToStreamlit("streamlit:setFrameHeight", {height: 0});
+            return;
+        }
+
+        dbGet(key).then(function(result) {
+            sendToStreamlit("streamlit:setComponentValue", {value: {loaded: true, data: result}});
+            sendToStreamlit("streamlit:setFrameHeight", {height: 0});
+        }).catch(function() {
+            sendToStreamlit("streamlit:setComponentValue", {value: {loaded: true, data: null}});
+            sendToStreamlit("streamlit:setFrameHeight", {height: 0});
+        });
+    });
+
+    sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
+    sendToStreamlit("streamlit:setFrameHeight", {height: 0});
+})();
+</script></body></html>

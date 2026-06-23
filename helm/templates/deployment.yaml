@@ -1,0 +1,86 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Values.app_name }}-{{ $.Values.env }}
+  labels:
+    app: {{ $.Values.app_name }}-{{ $.Values.env }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ $.Values.app_name }}-{{ $.Values.env }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        antiaffinity: preferred
+        app: {{ $.Values.app_name }}-{{ $.Values.env }}
+        deployment: {{ $.Values.app_name }}-{{ $.Values.env }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchExpressions:
+                      - key: antiaffinity
+                        operator: In
+                        values:
+                          - preferred
+                  topologyKey: kubernetes.io/hostname
+      containers:
+        - name: {{ $.Values.app_name }}-{{ $.Values.env }}
+          image: {{ $.Values.image.repository }}:{{ $.Values.image.tag }}
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: {{ $.Values.resources.requests.cpu }}
+              memory: {{ $.Values.resources.requests.memory }}
+            limits:
+              cpu: {{ $.Values.resources.limits.cpu }}
+              memory: {{ $.Values.resources.limits.memory }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              {{- range .Values.service.ports }}
+              port: {{ .port }}
+              {{- end }}
+              scheme: HTTP
+              {{- toYaml .Values.livenessProbe.frequency | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              {{- range .Values.service.ports }}
+              port: {{ .port }}
+              {{- end }}
+              scheme: HTTP
+              {{- toYaml .Values.readinessProbe.frequency | nindent 12 }}
+          {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ $.Values.app_name }}-{{ $.Values.env }}-appenv
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      securityContext: {}
+      {{- if .Values.image.pullSecretName }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecretName }}
+      {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600

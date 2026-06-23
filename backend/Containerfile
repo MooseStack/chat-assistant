@@ -1,0 +1,40 @@
+# Stage 1: Build the wheel
+FROM registry.access.redhat.com/hi/python:3.14-builder AS builder
+
+WORKDIR /opt/app-root/src
+
+COPY pyproject.toml .
+COPY app/ app/
+
+RUN pip install --no-cache-dir build --trusted-host pypi.org --trusted-host files.pythonhosted.org && \
+    python -m build --wheel --outdir /opt/app-root/dist
+
+# Stage 2: Install the wheel (using builder image which has bash)
+FROM registry.access.redhat.com/hi/python:3.14-builder AS installer
+
+WORKDIR /opt/app-root/src
+
+COPY --from=builder /opt/app-root/dist/*.whl /tmp/
+
+RUN pip install --no-cache-dir --target=/opt/app-root/src/site-packages /tmp/*.whl --trusted-host pypi.org --trusted-host files.pythonhosted.org
+
+# Stage 3: Final image (no shell(for RUN) in this image - only COPY/ENV/CMD)
+FROM registry.access.redhat.com/hi/python:3.14
+
+WORKDIR /opt/app-root/src
+
+# Copy installed packages from installer
+COPY --from=installer /opt/app-root/src/site-packages /opt/app-root/src/site-packages
+
+ENV PYTHONPATH=/opt/app-root/src/site-packages
+
+EXPOSE 8000
+
+ENV LLM_BASE_URL="http://localhost:3001/v1"
+ENV LLM_API_KEY="not-needed"
+ENV LLM_MODEL="gemma4-4b"
+ENV SSL_VERIFY=false
+ENV LOG_LEVEL=ERROR
+ENV CORS_ALLOWED_ORIGINS="*"
+
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
