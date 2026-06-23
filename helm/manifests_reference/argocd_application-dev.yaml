@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: sample-ai-app
+  name: sample-ai-app-backend # Recreate for each app. Including the other 2 frontends.
   namespace: openshift-gitops
 spec:
   destination:
@@ -11,7 +11,7 @@ spec:
   source:
     helm:
       valueFiles:
-        - values.yaml
+        - values-backend.yaml # Update for each app. Including the other 2 frontends.
     path: helm
     repoURL: '<GITREPO>'
     targetRevision: main
